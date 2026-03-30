@@ -17,11 +17,28 @@ export function ActionControls({ gameState, onAction, disabled = false }: Action
   const [raiseAmount, setRaiseAmount] = useState<number>(0);
 
   const hero = gameState.players.find((p) => p.id === gameState.heroId);
-  if (!hero || !gameState.isHeroTurn || !gameState.currentBettingRound) return null;
-
-  const legal = getLegalActions(gameState, hero.id);
   const round = gameState.currentBettingRound;
-  const presets = getPresetSizes(
+  const isActionable = Boolean(hero && gameState.isHeroTurn && round);
+
+  const legal = hero
+    ? getLegalActions(gameState, hero.id)
+    : {
+        canFold: false,
+        canCheck: false,
+        canCall: false,
+        callAmount: 0,
+        canBet: false,
+        canRaise: false,
+        minRaiseTotal: 0,
+        maxRaiseTotal: 0,
+      };
+  const minAmount = legal.minRaiseTotal;
+  const maxAmount = legal.maxRaiseTotal;
+  const clampRaiseAmount = (amount: number) => Math.min(Math.max(amount, minAmount), maxAmount);
+
+  if (!isActionable || !hero || !round) return null;
+
+  const rawPresets = getPresetSizes(
     gameState.pot,
     round.currentBet,
     round.betsThisRound[hero.id] ?? 0,
@@ -29,15 +46,26 @@ export function ActionControls({ gameState, onAction, disabled = false }: Action
     gameState.bigBlindAmount,
   );
 
+  const uniquePresetAmounts = new Set<number>();
+  const presets = rawPresets
+    .map((preset) => ({ ...preset, amount: clampRaiseAmount(preset.amount) }))
+    .filter((preset) => {
+      if (uniquePresetAmounts.has(preset.amount)) return false;
+      uniquePresetAmounts.add(preset.amount);
+      return true;
+    });
+
+  const defaultRaiseAmount = presets[1]?.amount ?? presets[0]?.amount ?? minAmount;
+  const displayedRaiseAmount = clampRaiseAmount(raiseAmount || defaultRaiseAmount);
+
   const initRaise = () => {
-    const defaultPreset = presets[1] ?? presets[0];
-    if (defaultPreset) setRaiseAmount(defaultPreset.amount);
+    setRaiseAmount(defaultRaiseAmount);
     setShowRaise(true);
   };
 
   const handleRaise = () => {
     const actionType = round.currentBet > 0 ? 'RAISE' : 'BET';
-    onAction(actionType, raiseAmount);
+    onAction(actionType, clampRaiseAmount(raiseAmount));
     setShowRaise(false);
   };
 
@@ -46,7 +74,7 @@ export function ActionControls({ gameState, onAction, disabled = false }: Action
       {showRaise ? (
         <div className="flex flex-col gap-2 bg-gray-800 rounded-xl p-3 border border-gray-600">
           <div className="text-gray-300 text-sm font-semibold">
-            {round.currentBet > 0 ? 'Raise to' : 'Bet'}: <span className="text-white font-bold">{formatBBs(raiseAmount)}bb</span>
+            {round.currentBet > 0 ? 'Raise to' : 'Bet'}: <span className="text-white font-bold">{formatBBs(displayedRaiseAmount)}bb</span>
           </div>
 
           {/* Preset buttons */}
@@ -69,16 +97,16 @@ export function ActionControls({ gameState, onAction, disabled = false }: Action
           {/* Slider */}
           <input
             type="range"
-            min={legal.minRaiseTotal}
-            max={legal.maxRaiseTotal}
+            min={minAmount}
+            max={maxAmount}
             step={0.5}
-            value={raiseAmount}
-            onChange={(e) => setRaiseAmount(Number(e.target.value))}
+            value={displayedRaiseAmount}
+            onChange={(e) => setRaiseAmount(clampRaiseAmount(Number(e.target.value)))}
             className="w-full accent-yellow-400"
           />
           <div className="flex justify-between text-[10px] text-gray-500">
-            <span>Min: {formatBBs(legal.minRaiseTotal)}bb</span>
-            <span>All-In: {formatBBs(legal.maxRaiseTotal)}bb</span>
+            <span>Min: {formatBBs(minAmount)}bb</span>
+            <span>All-In: {formatBBs(maxAmount)}bb</span>
           </div>
 
           <div className="flex gap-2">
@@ -97,7 +125,7 @@ export function ActionControls({ gameState, onAction, disabled = false }: Action
               className="flex-1"
               disabled={disabled}
             >
-              {round.currentBet > 0 ? 'Raise' : 'Bet'} {formatBBs(raiseAmount)}bb
+              {round.currentBet > 0 ? 'Raise' : 'Bet'} {formatBBs(displayedRaiseAmount)}bb
             </Button>
           </div>
         </div>
