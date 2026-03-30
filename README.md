@@ -65,6 +65,33 @@ npm run lint
 5. Feedback is shown immediately, then play continues.
 6. At hand completion, the app shows a review modal and updates session stats.
 
+## Engine Design
+
+The engine layer is split into small, focused modules instead of one monolithic poker engine:
+
+- `gameEngine.ts` owns hand flow, player rotation, blinds, betting-round progression, street dealing, and showdown resolution
+- `bettingEngine.ts` computes legal actions and raise sizing constraints for the current state
+- `villainEngine.ts` generates opponent actions using archetype profiles, preflop ranges, and lightweight postflop heuristics
+- `feedbackEngine.ts` grades hero decisions using position, initiative, board texture, SPR, multiway context, and hand category
+- `boardTextureEngine.ts` and `handClassifier.ts` turn raw cards into training-friendly concepts the feedback layer can reason about
+- `handEvaluator.ts` and related utilities handle card strength evaluation and showdown comparisons
+
+## Why This Engine Approach
+
+This project intentionally uses a structured heuristic engine instead of a full solver-backed or game-tree-search engine.
+
+A full poker engine with near-solver-level outputs would require much heavier computation, significantly more state modeling, much larger strategy datasets, and far more complex infrastructure around equilibrium solving, abstractions, and caching. That would be disproportionate for a browser-based training app meant to give immediate feedback on every hand.
+
+The current approach is a strong intermediate layer because it preserves the parts that matter most for training:
+
+- correct hand flow and betting logic
+- position-aware preflop ranges
+- differentiated villain archetypes
+- postflop reasoning based on board texture, SPR, initiative, and hand strength
+- instant, explainable feedback instead of opaque solver outputs
+
+In practice, this gives a useful balance between realism, maintainability, and speed. It is much more educational than a purely random or scripted opponent model, while avoiding the computational cost and implementation complexity of a full GTO engine.
+
 ## Project Structure
 
 ```text
